@@ -5,6 +5,18 @@ All notable changes to Stik will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.4] - 2026-03-02
+Window position and cursor persistence
+
+### Added
+- **Window position persistence** — capture, sticked, and viewing windows now remember their last position across sessions. All three window types share the same position, so Cmd+Shift+S and Cmd+Shift+L always open at the same spot
+- **Multi-monitor support** — saved window positions are validated against connected monitors; if the target monitor is unplugged, the window falls back to centering on the primary display
+- **Cursor position persistence** — cursor position is saved per-note when closing any window and restored when reopening the same note via Cmd+Shift+L
+
+### Fixed
+- **Retina display positioning** — fixed physical/logical coordinate mismatch where `outerPosition()` returned physical pixels but `WebviewWindowBuilder::position()` interpreted them as logical, causing windows to drift off-screen on HiDPI displays
+- **Sticked note position drift** — sticked notes now use `set_position(PhysicalPosition)` after build (matching the official tauri-plugin-window-state approach) instead of the builder's `position()` method
+
 ## [0.7.3] - 2026-03-01
 Finder integration, auto-updater improvements, and cleanup
 
