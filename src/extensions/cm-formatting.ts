@@ -9,13 +9,25 @@ import type { EditorView } from "@codemirror/view";
 export function toggleInlineFormat(view: EditorView, marker: string): void {
   const { state } = view;
   const { from, to } = state.selection.main;
+  const mLen = marker.length;
 
-  if (from === to) return; // No selection — nothing to wrap
+  if (from === to) {
+    // No selection — auto-insert only for multi-char markers (**, ~~, ==).
+    // Single-char markers (`, *) are ambiguous: ` is used for both inline
+    // code and fenced blocks, * for italic and list items. Auto-inserting
+    // them causes conflicts when typing related syntax.
+    if (mLen >= 2) {
+      view.dispatch({
+        changes: { from, insert: marker + marker },
+        selection: { anchor: from + mLen },
+      });
+    }
+    return;
+  }
 
   const selected = state.sliceDoc(from, to);
 
   // Check if already wrapped
-  const mLen = marker.length;
   const before = state.sliceDoc(Math.max(0, from - mLen), from);
   const after = state.sliceDoc(to, Math.min(state.doc.length, to + mLen));
 
@@ -26,21 +38,21 @@ export function toggleInlineFormat(view: EditorView, marker: string): void {
         { from: from - mLen, to: from, insert: "" },
         { from: to, to: to + mLen, insert: "" },
       ],
-      selection: { anchor: from - mLen, head: to - mLen },
+      selection: { anchor: to - mLen },
     });
   } else if (selected.startsWith(marker) && selected.endsWith(marker) && selected.length >= mLen * 2) {
     // Selection includes markers — remove them
     const inner = selected.slice(mLen, -mLen);
     view.dispatch({
       changes: { from, to, insert: inner },
-      selection: { anchor: from, head: from + inner.length },
+      selection: { anchor: from + inner.length },
     });
   } else {
-    // Wrap selection
+    // Wrap selection — cursor at end, after closing marker
     const wrapped = `${marker}${selected}${marker}`;
     view.dispatch({
       changes: { from, to, insert: wrapped },
-      selection: { anchor: from, head: from + wrapped.length },
+      selection: { anchor: from + wrapped.length },
     });
   }
 }

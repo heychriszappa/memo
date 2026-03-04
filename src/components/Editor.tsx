@@ -21,6 +21,7 @@ import {
 } from "@codemirror/view";
 import { defaultKeymap, history, historyKeymap, indentWithTab, insertNewline } from "@codemirror/commands";
 import { markdown, markdownLanguage } from "@codemirror/lang-markdown";
+import { syntaxTree } from "@codemirror/language";
 import { languages } from "@codemirror/language-data";
 import { autocompletion, closeCompletion, completionStatus } from "@codemirror/autocomplete";
 import { search, searchKeymap } from "@codemirror/search";
@@ -189,6 +190,7 @@ const Editor = forwardRef<EditorRef, EditorProps>(
         // Smart Enter: if cursor is right before closing markers (** ~~ ==),
         // close the formatting first, then newline. Markdown inline syntax
         // can't span lines, so this prevents broken formatting.
+        // Skip inside FencedCode — ~~ there is fence syntax, not strikethrough.
         {
           key: "Enter",
           run: (view) => {
@@ -197,11 +199,17 @@ const Editor = forwardRef<EditorRef, EditorProps>(
               const doc = view.state.doc;
               const after = doc.sliceString(head, Math.min(head + 2, doc.length));
               if (after === "**" || after === "~~" || after === "==") {
-                view.dispatch({
-                  changes: { from: head + 2, insert: "\n" },
-                  selection: { anchor: head + 2 + 1 },
-                });
-                return true;
+                // Don't interfere inside fenced code blocks
+                const tree = syntaxTree(view.state);
+                const nodeAt = tree.resolveInner(head, 1);
+                const inFenced = nodeAt.name === "FencedCode" || nodeAt.parent?.name === "FencedCode";
+                if (!inFenced) {
+                  view.dispatch({
+                    changes: { from: head + 2, insert: "\n" },
+                    selection: { anchor: head + 2 + 1 },
+                  });
+                  return true;
+                }
               }
             }
             return insertNewline(view);
@@ -211,6 +219,7 @@ const Editor = forwardRef<EditorRef, EditorProps>(
         // (****  ~~~~  ====), delete the entire pair in one stroke.
         // Without this, hidden markers create a confusing experience —
         // the user sees nothing but Backspace would only delete one marker char.
+        // Skip inside FencedCode — ~~~~ there is fence syntax, not formatting.
         {
           key: "Backspace",
           run: (view) => {
@@ -220,6 +229,11 @@ const Editor = forwardRef<EditorRef, EditorProps>(
             if (head + 2 > doc.length) return false;
             const around = doc.sliceString(head - 2, head + 2);
             if (around === "****" || around === "~~~~" || around === "====") {
+              // Don't interfere inside fenced code blocks
+              const tree = syntaxTree(view.state);
+              const nodeAt = tree.resolveInner(head, -1);
+              const inFenced = nodeAt.name === "FencedCode" || nodeAt.parent?.name === "FencedCode";
+              if (inFenced) return false;
               view.dispatch({
                 changes: { from: head - 2, to: head + 2, insert: "" },
                 selection: { anchor: head - 2 },

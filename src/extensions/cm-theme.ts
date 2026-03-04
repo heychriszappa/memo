@@ -269,6 +269,32 @@ export const stikEditorTheme = EditorView.theme({
     color: "rgb(var(--color-stone))",
     lineHeight: "1.4",
   },
+  // Fenced code block lines (live preview)
+  ".cm-fenced-code": {
+    backgroundColor: "var(--editor-code-bg)",
+    fontFamily: "Monaco, Consolas, monospace",
+    fontSize: "0.86em",
+    margin: "0 -16px",
+    padding: "0 16px",
+  },
+  ".cm-fenced-code-first": {
+    borderRadius: "6px 6px 0 0",
+    paddingTop: "4px",
+  },
+  ".cm-fenced-code-last": {
+    borderRadius: "0 0 6px 6px",
+    paddingBottom: "4px",
+  },
+  // Collapsed fence line — content replaced within line, CSS collapses height.
+  // Keeps DOM flow intact (no newline-crossing replace decorations).
+  ".cm-fenced-fence-hidden": {
+    fontSize: "0",
+    lineHeight: "0",
+    height: "0",
+    overflow: "hidden",
+    padding: "0 !important",
+    margin: "0 !important",
+  },
 });
 
 /** Syntax highlighting for markdown source mode.

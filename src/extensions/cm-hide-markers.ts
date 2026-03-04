@@ -26,6 +26,36 @@ import { rangeInSelection } from "./cm-range-utils";
 /** Reusable empty replacement — hides a range with no visual substitute */
 const hiddenDeco = Decoration.replace({});
 
+/** Line decorations for fenced code block — first/last get rounded corners */
+const fencedCodeLineDeco = Decoration.line({ class: "cm-fenced-code" });
+const fencedCodeFirstDeco = Decoration.line({ class: "cm-fenced-code cm-fenced-code-first" });
+const fencedCodeLastDeco = Decoration.line({ class: "cm-fenced-code cm-fenced-code-last" });
+const fencedCodeOnlyDeco = Decoration.line({ class: "cm-fenced-code cm-fenced-code-first cm-fenced-code-last" });
+
+/** Line decoration to visually collapse a fence line to zero height.
+ *  Used WITH a same-line Decoration.replace({}) that empties the content.
+ *  CM6 constraint: ViewPlugin replace decos MUST NOT cross newlines. */
+const fencedFenceHiddenDeco = Decoration.line({ class: "cm-fenced-fence-hidden" });
+
+/** Push fenced-code line decorations with first/last rounding classes */
+function pushFencedLineDecos(
+  ranges: Range<Decoration>[],
+  doc: { line(n: number): { from: number } },
+  startLine: number,
+  endLine: number,
+) {
+  for (let ln = startLine; ln <= endLine; ln++) {
+    const isFirst = ln === startLine;
+    const isLast = ln === endLine;
+    const deco =
+      isFirst && isLast ? fencedCodeOnlyDeco :
+      isFirst ? fencedCodeFirstDeco :
+      isLast ? fencedCodeLastDeco :
+      fencedCodeLineDeco;
+    ranges.push(deco.range(doc.line(ln).from));
+  }
+}
+
 /**
  * Scan visible portions of the syntax tree and collect Decoration.replace({})
  * ranges for all formatting markers whose parent node is NOT under the cursor.
@@ -54,6 +84,12 @@ function buildDecorations(view: EditorView): DecorationSet {
 
           case "Strikethrough": {
             if (rangeInSelection(selection, node.from, node.to)) return;
+            // Guard: empty tilde-only nodes at line start (e.g. ~~) may be
+            // fence delimiters mid-typing (~~~). Same parser race as InlineCode.
+            const stLine = doc.lineAt(node.from);
+            const stBefore = doc.sliceString(stLine.from, node.from);
+            const stText = doc.sliceString(node.from, node.to);
+            if (stBefore.trim() === "" && /^~+$/.test(stText)) break;
             for (const mark of node.node.getChildren("StrikethroughMark")) {
               ranges.push(hiddenDeco.range(mark.from, mark.to));
             }
@@ -62,6 +98,14 @@ function buildDecorations(view: EditorView): DecorationSet {
 
           case "InlineCode": {
             if (rangeInSelection(selection, node.from, node.to)) return;
+            // Guard: empty backtick-only nodes at line start (e.g. ``)
+            // are likely fence delimiters mid-typing. The incremental parser
+            // briefly creates InlineCode before recognizing FencedCode on the
+            // next keystroke. Hiding these causes a jarring backtick flash.
+            const icLine = doc.lineAt(node.from);
+            const icBefore = doc.sliceString(icLine.from, node.from);
+            const icText = doc.sliceString(node.from, node.to);
+            if (icBefore.trim() === "" && /^`+$/.test(icText)) break;
             for (const mark of node.node.getChildren("CodeMark")) {
               ranges.push(hiddenDeco.range(mark.from, mark.to));
             }
@@ -126,6 +170,58 @@ function buildDecorations(view: EditorView): DecorationSet {
             ranges.push(hiddenDeco.range(node.from, end));
             break;
           }
+
+          // Fenced code: ```lang ... ``` — Notion-style live preview.
+          // Unclosed blocks: keep opening fence visible, only style content lines.
+          // Closed blocks: hide/reveal fences based on cursor position.
+          case "FencedCode": {
+            const marks = node.node.getChildren("CodeMark");
+            if (marks.length === 0) break;
+
+            const openLine = doc.lineAt(marks[0].from);
+            const closed = marks.length >= 2;
+
+            // Unclosed blocks — don't hide fences (no clear boundary).
+            // Style ALL lines (including opening fence) with code background
+            // so the unclosed→closed transition is seamless — no visual jump
+            // when the user types the closing ``` and cursor stays inside.
+            if (!closed) {
+              const lastLine = doc.lineAt(node.to).number;
+              pushFencedLineDecos(ranges, doc, openLine.number, lastLine);
+              return false;
+            }
+
+            // Closed blocks — hide/reveal fences based on cursor position
+            const closeLine = doc.lineAt(marks[marks.length - 1].from);
+            const cursorInside = selection.ranges.some(
+              (r) => r.from === r.to && r.head >= openLine.from && r.head <= closeLine.to,
+            );
+
+            const contentFirst = openLine.number + 1;
+            const contentLast = closeLine.number - 1;
+
+            if (cursorInside) {
+              // Cursor inside — show all lines with code background
+              pushFencedLineDecos(ranges, doc, openLine.number, closeLine.number);
+            } else {
+              // Cursor outside — hide fences, show styled content
+              if (contentFirst <= contentLast) {
+                pushFencedLineDecos(ranges, doc, contentFirst, contentLast);
+              }
+              // Hide fence content WITHIN line boundaries only.
+              // CM6 constraint: ViewPlugin replace decos MUST NOT cross newlines —
+              // crossing \n is silently ignored and causes cursor position bugs.
+              // Use line decoration (CSS height:0) to visually collapse the line.
+              ranges.push(hiddenDeco.range(openLine.from, openLine.to));
+              ranges.push(fencedFenceHiddenDeco.range(openLine.from));
+              if (closeLine.number !== openLine.number) {
+                ranges.push(hiddenDeco.range(closeLine.from, closeLine.to));
+                ranges.push(fencedFenceHiddenDeco.range(closeLine.from));
+              }
+            }
+
+            return false;
+          }
         }
       },
     });
@@ -180,11 +276,22 @@ export const autoCloseMarkup = EditorView.inputHandler.of(
 
     // Skip over closing markers when exiting formatted text.
     // e.g. cursor in **hello|** — typing * jumps past the closing **
+    // Don't skip for ~ at line start or inside FencedCode (typing ~~~ fence delimiter).
     if (
       (text === "*" && after.startsWith("**") && before !== "*") ||
-      (text === "~" && after.startsWith("~~") && before !== "~") ||
       (text === "=" && after.startsWith("==") && before !== "=")
     ) {
+      view.dispatch({ selection: { anchor: from + 2 } });
+      return true;
+    }
+    if (text === "~" && after.startsWith("~~") && before !== "~") {
+      const line = doc.lineAt(from);
+      const textBeforeCursor = doc.sliceString(line.from, from).replace(/~/g, "");
+      const atLineStart = textBeforeCursor.trim() === "";
+      const tree = syntaxTree(view.state);
+      const nodeAt = tree.resolveInner(from, -1);
+      const insideFencedCode = nodeAt.name === "FencedCode" || nodeAt.parent?.name === "FencedCode";
+      if (atLineStart || insideFencedCode) return false;
       view.dispatch({ selection: { anchor: from + 2 } });
       return true;
     }
@@ -199,6 +306,15 @@ export const autoCloseMarkup = EditorView.inputHandler.of(
       return true;
     }
     if (text === "~" && before === "~" && beforeBefore !== "~" && !after.startsWith("~")) {
+      // Don't auto-close ~~ at line start — user may be typing ~~~ for a fenced code block.
+      // Also skip inside FencedCode nodes (closing fence).
+      const line = doc.lineAt(from);
+      const textBeforeTildes = doc.sliceString(line.from, from - 1);
+      const atLineStart = textBeforeTildes.trim() === "";
+      const tree = syntaxTree(view.state);
+      const nodeAt = tree.resolveInner(from, -1);
+      const insideFencedCode = nodeAt.name === "FencedCode" || nodeAt.parent?.name === "FencedCode";
+      if (atLineStart || insideFencedCode) return false;
       view.dispatch({
         changes: { from, insert: "~~~" },
         selection: { anchor: from + 1 },

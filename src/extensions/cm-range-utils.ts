@@ -8,7 +8,11 @@
 import type { EditorSelection } from "@codemirror/state";
 
 /**
- * Returns true if any selection range overlaps [rangeFrom, rangeTo].
+ * Returns true if a collapsed cursor sits inside [rangeFrom, rangeTo].
+ * Non-collapsed selections (Select All, click-drag) are ignored — markers
+ * should only reveal when the user is editing at a specific position,
+ * not when selecting text for copy/delete/format.
+ *
  * With includeAdjacent=true (default), cursor touching a boundary counts —
  * this means markers are revealed when cursor is right next to them.
  */
@@ -18,9 +22,10 @@ export function rangeInSelection(
   rangeTo: number,
   includeAdjacent = true,
 ): boolean {
-  return selection.ranges.some((range) =>
-    includeAdjacent
-      ? range.to >= rangeFrom && range.from <= rangeTo
-      : range.to > rangeFrom && range.from < rangeTo,
-  );
+  return selection.ranges.some((range) => {
+    if (range.from !== range.to) return false; // skip text selections
+    return includeAdjacent
+      ? range.head >= rangeFrom && range.head <= rangeTo
+      : range.head > rangeFrom && range.head < rangeTo;
+  });
 }
