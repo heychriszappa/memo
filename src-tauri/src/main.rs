@@ -11,8 +11,8 @@ use commands::embeddings::EmbeddingIndex;
 use commands::index::NoteIndex;
 use commands::{
     ai_assistant, analytics, apple_notes, cursor_positions, darwinkit, embeddings,
-    folders, git_share, icloud, index, note_lock, notes, on_this_day, settings, share,
-    stats, sticked_notes, storage,
+    file_watcher, folders, git_share, icloud, index, note_lock, notes, on_this_day,
+    settings, share, stats, sticked_notes, storage,
 };
 use shortcuts::shortcut_to_string;
 use state::AppState;
@@ -247,6 +247,8 @@ fn main() {
                 if let Err(e) = index.build() {
                     eprintln!("Failed to build note index: {}", e);
                 }
+                // Watch local notes directory for external changes
+                file_watcher::start(app.handle().clone());
             }
             shortcuts::register_shortcuts_from_settings(app.handle(), &settings);
             analytics::start_analytics(app.handle());
@@ -299,24 +301,8 @@ fn main() {
                                     .collect();
 
                                 if !path_strings.is_empty() {
-                                    // Update note index
-                                    let index = handle.state::<NoteIndex>();
-                                    index.notify_external_change(&path_strings);
-
-                                    // Queue embedding for new/changed notes
-                                    let emb = handle.state::<EmbeddingIndex>();
-                                    for path_str in &path_strings {
-                                        if let Ok(content) = storage::read_file(path_str) {
-                                            if !notes::is_effectively_empty_markdown(&content) {
-                                                if let Some(embedding) = embeddings::embed_content(&content) {
-                                                    emb.add_entry(path_str, embedding);
-                                                }
-                                            }
-                                        }
-                                    }
-                                    let _ = emb.save();
-
-                                    // Notify frontend
+                                    file_watcher::handle_changes(&handle, &path_strings);
+                                    // Also emit iCloud-specific event for SyncIndicator
                                     let _ = handle.emit("icloud-files-changed", &path_strings);
                                 }
                             }

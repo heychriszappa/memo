@@ -153,12 +153,16 @@ export default function CommandPalette() {
       if (s.sidebar_position === "right") setSidebarPosition("right");
     });
 
-    const unlisten = listen<StikSettings>("settings-changed", (event) => {
-      settingsRef.current = event.payload;
-      setFolderColors(event.payload.folder_colors ?? {});
-    });
+    const unlistenSettings = listen<StikSettings>(
+      "settings-changed",
+      (event) => {
+        settingsRef.current = event.payload;
+        setFolderColors(event.payload.folder_colors ?? {});
+      },
+    );
+
     return () => {
-      unlisten.then((fn) => fn());
+      unlistenSettings.then((fn) => fn());
     };
   }, [loadFolderStats]);
 
@@ -325,6 +329,20 @@ export default function CommandPalette() {
       setSelectedNoteIndex((i) => Math.min(i, recent.length - 1));
     }
   }, [loadFolderStats, query, selectedFolder]);
+
+  // Refresh note list when files change externally (local watcher or iCloud sync)
+  useEffect(() => {
+    const unlistenFiles = listen("files-changed", () => {
+      refreshAfterChange();
+    });
+    const unlistenICloud = listen("icloud-files-changed", () => {
+      refreshAfterChange();
+    });
+    return () => {
+      unlistenFiles.then((fn) => fn());
+      unlistenICloud.then((fn) => fn());
+    };
+  }, [refreshAfterChange]);
 
   // Delete note
   const handleDeleteNote = useCallback(
