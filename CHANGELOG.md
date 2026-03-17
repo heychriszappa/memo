@@ -5,6 +5,20 @@ All notable changes to Stik will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.9] - 2026-03-17
+Local file watching and external change detection
+
+### Added
+- **Local file watcher** — external changes to `.md` files (from CLI tools, Obsidian, scripts, etc.) are now detected in real-time and reflected in the UI without restarting. Uses `notify-rs` with FSEvents backend and 500ms debouncing
+- **Auto-refresh on external changes** — CommandPalette note list, folder stats, and search results now refresh automatically when files change externally, for both local and iCloud modes
+
+### Fixed
+- **iCloud sync not refreshing note list** — `SyncIndicator` showed the sync animation but `CommandPalette` never refreshed. Now listens for `icloud-files-changed` events and updates the list
+
+### Dependencies
+- Bumped `quinn-proto` 0.11.13 → 0.11.14
+- Bumped `undici` 7.21.0 → 7.24.1
+
 ## [0.7.8] - 2026-03-11
 Hotfix: DarwinKit sidecar not found in production bundle
 
