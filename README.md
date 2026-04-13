@@ -11,12 +11,12 @@
 </p>
 
 <p align="center">
-  <a href="https://www.stik.ink">Website</a> &middot;
+  <a href="https://www.stik.ink?utm_source=github&utm_medium=readme&utm_campaign=nav_website">Website</a> &middot;
   <a href="https://www.youtube.com/watch?v=eiMUVcojTng">Demo</a> &middot;
-  <a href="https://www.stik.ink/ideas">Ideas Board</a> &middot;
+  <a href="https://www.stik.ink/ideas?utm_source=github&utm_medium=readme&utm_campaign=nav_ideas">Ideas Board</a> &middot;
   <a href="https://x.com/stik_app">X</a> &middot;
   <a href="https://discord.gg/gG8vdCCRzW">Discord</a> &middot;
-  <a href="https://github.com/0xMassi/stik_app/releases">Download</a> &middot;
+  <a href="https://www.stik.ink/download?utm_source=github&utm_medium=readme&utm_campaign=nav_download">Download</a> &middot;
   <a href="ROADMAP.md">Roadmap</a> &middot;
   <a href="CHANGELOG.md">Changelog</a>
 </p>
@@ -33,6 +33,10 @@
   <img src=".github/assets/hero.gif" width="600" alt="Stik demo">
 </p>
 
+<p align="center">
+  <a href="https://www.stik.ink/download?utm_source=github&utm_medium=readme&utm_campaign=hero_cta"><img src="https://img.shields.io/badge/Download_Stik_for_Mac-E8705F?style=for-the-badge&logo=apple&logoColor=white" alt="Download Stik for Mac"></a>
+</p>
+
 ---
 
 ## Why Stik?
@@ -43,7 +47,13 @@ No onboarding. No account. No sync setup. Hit `Cmd+Shift+S`, type, close. Your n
 
 ## Install
 
-### Homebrew (Recommended)
+### Download for Mac
+
+Grab the latest `.dmg` from **[stik.ink/download](https://www.stik.ink/download?utm_source=github&utm_medium=readme&utm_campaign=install_primary)** — the recommended path, with release notes and a quick walkthrough.
+
+Prefer GitHub? The same `.dmg` is on the [Releases page](https://github.com/0xMassi/stik_app/releases/latest).
+
+### Homebrew
 
 ```bash
 brew install --cask 0xMassi/stik/stik
@@ -55,10 +65,6 @@ Or add the tap first:
 brew tap 0xMassi/stik
 brew install --cask stik
 ```
-
-### Direct Download
-
-Grab the latest `.dmg` from [GitHub Releases](https://github.com/0xMassi/stik_app/releases).
 
 > Requires **macOS 10.15+**. On first launch, grant Accessibility permissions when prompted (needed for global shortcuts).
 
@@ -157,7 +163,7 @@ npm run build
 
 ## Ideas Board
 
-Got a feature idea or want to vote on what gets built next? Visit the **[Stik Ideas Board](https://www.stik.ink/ideas)** -- sign in with GitHub, submit ideas, upvote your favorites, and discuss with the community. The roadmap is shaped by you.
+Got a feature idea or want to vote on what gets built next? Visit the **[Stik Ideas Board](https://www.stik.ink/ideas?utm_source=github&utm_medium=readme&utm_campaign=body_ideas)** -- sign in with GitHub, submit ideas, upvote your favorites, and discuss with the community. The roadmap is shaped by you.
 
 ## Support
 
