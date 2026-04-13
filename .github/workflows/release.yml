@@ -179,8 +179,12 @@ jobs:
         run: |
           VERSION="${GITHUB_REF_NAME#v}"
 
-          # Download DMGs using repo-scoped GITHUB_TOKEN
-          GH_TOKEN="$GITHUB_TOKEN" gh release download "$GITHUB_REF_NAME" --pattern "*.dmg" --dir "$RUNNER_TEMP"
+          # Download DMGs using repo-scoped GITHUB_TOKEN.
+          # --skip-existing: the "Build signed DMGs and upload to release"
+          # step already placed identical copies in $RUNNER_TEMP, so we
+          # just reuse them rather than re-downloading.
+          GH_TOKEN="$GITHUB_TOKEN" gh release download "$GITHUB_REF_NAME" \
+            --pattern "*.dmg" --dir "$RUNNER_TEMP" --skip-existing
           SHA_ARM=$(shasum -a 256 "$RUNNER_TEMP/Stik_${VERSION}_aarch64.dmg" | cut -d' ' -f1)
           SHA_INTEL=$(shasum -a 256 "$RUNNER_TEMP/Stik_${VERSION}_x64.dmg" | cut -d' ' -f1)
 
