@@ -273,6 +273,7 @@ export default function CommandPalette() {
         closePalette();
       } catch (error) {
         console.error("Failed to open note:", error);
+        setToast(`Couldn't open note: ${String(error)}`);
       }
     },
     [closePalette],

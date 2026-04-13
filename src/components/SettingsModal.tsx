@@ -6,16 +6,33 @@ import { getVersion } from "@tauri-apps/api/app";
 import SettingsContent from "./SettingsContent";
 import SettingsFooterLinks from "./SettingsFooterLinks";
 import type { SettingsTab } from "./SettingsContent";
-import type { CaptureStreakStatus, GitSyncStatus, OnThisDayStatus, StikSettings } from "@/types";
+import type {
+  CaptureStreakStatus,
+  GitSyncStatus,
+  OnThisDayStatus,
+  StikSettings,
+} from "@/types";
 import { createCoalescedTaskRunner } from "@/utils/coalescedTaskRunner";
-import { SETTINGS_MODAL_MAX_WIDTH, SETTINGS_MODAL_MIN_WIDTH } from "@/utils/settingsLayout";
+import {
+  SETTINGS_MODAL_MAX_WIDTH,
+  SETTINGS_MODAL_MIN_WIDTH,
+} from "@/utils/settingsLayout";
 
 const TABS: { id: SettingsTab; label: string; icon: React.ReactNode }[] = [
   {
     id: "appearance",
     label: "Appearance",
     icon: (
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <svg
+        width="16"
+        height="16"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      >
         <circle cx="13.5" cy="6.5" r=".5" />
         <circle cx="17.5" cy="10.5" r=".5" />
         <circle cx="8.5" cy="7.5" r=".5" />
@@ -28,7 +45,16 @@ const TABS: { id: SettingsTab; label: string; icon: React.ReactNode }[] = [
     id: "shortcuts",
     label: "Shortcuts",
     icon: (
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <svg
+        width="16"
+        height="16"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      >
         <rect x="2" y="4" width="20" height="16" rx="2" />
         <path d="M6 8h.01M10 8h.01M14 8h.01M18 8h.01M8 12h.01M12 12h.01M16 12h.01M9 16h6" />
       </svg>
@@ -38,7 +64,16 @@ const TABS: { id: SettingsTab; label: string; icon: React.ReactNode }[] = [
     id: "folders",
     label: "Folders",
     icon: (
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <svg
+        width="16"
+        height="16"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      >
         <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
       </svg>
     ),
@@ -47,7 +82,16 @@ const TABS: { id: SettingsTab; label: string; icon: React.ReactNode }[] = [
     id: "editor",
     label: "Editor",
     icon: (
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <svg
+        width="16"
+        height="16"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      >
         <path d="M17 3a2.85 2.85 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z" />
         <path d="m15 5 4 4" />
       </svg>
@@ -57,7 +101,16 @@ const TABS: { id: SettingsTab; label: string; icon: React.ReactNode }[] = [
     id: "templates",
     label: "Templates",
     icon: (
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <svg
+        width="16"
+        height="16"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      >
         <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
         <polyline points="14 2 14 8 20 8" />
         <line x1="16" y1="13" x2="8" y2="13" />
@@ -70,7 +123,16 @@ const TABS: { id: SettingsTab; label: string; icon: React.ReactNode }[] = [
     id: "git",
     label: "Git Sharing",
     icon: (
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <svg
+        width="16"
+        height="16"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      >
         <line x1="6" y1="3" x2="6" y2="15" />
         <circle cx="18" cy="6" r="3" />
         <circle cx="6" cy="18" r="3" />
@@ -82,8 +144,38 @@ const TABS: { id: SettingsTab; label: string; icon: React.ReactNode }[] = [
     id: "ai",
     label: "AI",
     icon: (
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <svg
+        width="16"
+        height="16"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      >
         <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83" />
+      </svg>
+    ),
+  },
+  {
+    id: "dictation",
+    label: "Dictation",
+    icon: (
+      <svg
+        width="16"
+        height="16"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      >
+        <rect x="9" y="2" width="6" height="12" rx="3" />
+        <path d="M5 10a7 7 0 0 0 14 0" />
+        <line x1="12" y1="17" x2="12" y2="22" />
+        <line x1="8" y1="22" x2="16" y2="22" />
       </svg>
     ),
   },
@@ -91,7 +183,16 @@ const TABS: { id: SettingsTab; label: string; icon: React.ReactNode }[] = [
     id: "insights",
     label: "Insights",
     icon: (
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <svg
+        width="16"
+        height="16"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      >
         <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" />
       </svg>
     ),
@@ -100,7 +201,16 @@ const TABS: { id: SettingsTab; label: string; icon: React.ReactNode }[] = [
     id: "privacy",
     label: "Privacy",
     icon: (
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <svg
+        width="16"
+        height="16"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      >
         <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
         <path d="M7 11V7a5 5 0 0 1 10 0v4" />
       </svg>
@@ -114,15 +224,23 @@ interface SettingsModalProps {
   isWindow?: boolean;
 }
 
-export default function SettingsModal({ isOpen, onClose, isWindow = false }: SettingsModalProps) {
+export default function SettingsModal({
+  isOpen,
+  onClose,
+  isWindow = false,
+}: SettingsModalProps) {
   const [activeTab, setActiveTab] = useState<SettingsTab>("appearance");
   const [settings, setSettings] = useState<StikSettings | null>(null);
   const [folders, setFolders] = useState<string[]>([]);
-  const [captureStreak, setCaptureStreak] = useState<CaptureStreakStatus | null>(null);
+  const [captureStreak, setCaptureStreak] =
+    useState<CaptureStreakStatus | null>(null);
   const [isRefreshingStreak, setIsRefreshingStreak] = useState(false);
-  const [onThisDayStatus, setOnThisDayStatus] = useState<OnThisDayStatus | null>(null);
+  const [onThisDayStatus, setOnThisDayStatus] =
+    useState<OnThisDayStatus | null>(null);
   const [isCheckingOnThisDay, setIsCheckingOnThisDay] = useState(false);
-  const [gitSyncStatus, setGitSyncStatus] = useState<GitSyncStatus | null>(null);
+  const [gitSyncStatus, setGitSyncStatus] = useState<GitSyncStatus | null>(
+    null,
+  );
   const [isPreparingGitRepo, setIsPreparingGitRepo] = useState(false);
   const [isSyncingGitNow, setIsSyncingGitNow] = useState(false);
   const [isOpeningGitRemote, setIsOpeningGitRemote] = useState(false);
@@ -238,11 +356,15 @@ export default function SettingsModal({ isOpen, onClose, isWindow = false }: Set
     if (isOpen) {
       invoke<StikSettings>("get_settings").then(setSettings);
       invoke<string[]>("list_folders").then(setFolders);
-      invoke<string>("get_notes_directory").then(setResolvedNotesDir).catch(() => {});
+      invoke<string>("get_notes_directory")
+        .then(setResolvedNotesDir)
+        .catch(() => {});
       loadCaptureStreak();
       checkOnThisDay();
       loadGitSyncStatus();
-      getVersion().then(setAppVersion).catch(() => {});
+      getVersion()
+        .then(setAppVersion)
+        .catch(() => {});
     }
   }, [isOpen]);
 
@@ -262,16 +384,20 @@ export default function SettingsModal({ isOpen, onClose, isWindow = false }: Set
     if (settings) {
       prevNotesDir.current = settings.notes_directory;
     }
-  // Only on initial load
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // Only on initial load
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen]);
 
   const performSave = useCallback(async (settingsToSave: StikSettings) => {
     try {
       await invoke("save_settings", { settings: settingsToSave });
       await invoke("reload_shortcuts");
-      await invoke("set_dock_icon_visibility", { hide: settingsToSave.hide_dock_icon });
-      await invoke("set_tray_icon_visibility", { hide: settingsToSave.hide_tray_icon ?? false });
+      await invoke("set_dock_icon_visibility", {
+        hide: settingsToSave.hide_dock_icon,
+      });
+      await invoke("set_tray_icon_visibility", {
+        hide: settingsToSave.hide_tray_icon ?? false,
+      });
 
       if (settingsToSave.notes_directory !== prevNotesDir.current) {
         await invoke("rebuild_index");
@@ -383,9 +509,22 @@ export default function SettingsModal({ isOpen, onClose, isWindow = false }: Set
     return (
       <div className="w-full h-full bg-bg rounded-[14px] flex flex-col overflow-hidden">
         <div data-tauri-drag-region className="border-b border-line bg-line/20">
-          <div className="flex items-center justify-between px-5 pt-4 pb-3" data-tauri-drag-region>
+          <div
+            className="flex items-center justify-between px-5 pt-4 pb-3"
+            data-tauri-drag-region
+          >
             <div className="flex items-center gap-2.5">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="text-coral">
+              <svg
+                width="18"
+                height="18"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.8"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                className="text-coral"
+              >
                 <circle cx="12" cy="12" r="3" />
                 <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z" />
               </svg>
@@ -396,7 +535,16 @@ export default function SettingsModal({ isOpen, onClose, isWindow = false }: Set
               onClick={handleClose}
               className="w-7 h-7 flex items-center justify-center rounded-lg text-stone hover:text-ink hover:bg-line/50 transition-colors"
             >
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <svg
+                width="14"
+                height="14"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
                 <path d="M18 6 6 18" />
                 <path d="m6 6 12 12" />
               </svg>
@@ -426,7 +574,17 @@ export default function SettingsModal({ isOpen, onClose, isWindow = false }: Set
         <div className="border-b border-line bg-line/20">
           <div className="flex items-center justify-between px-5 pt-4 pb-3">
             <div className="flex items-center gap-2.5">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="text-coral">
+              <svg
+                width="18"
+                height="18"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.8"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                className="text-coral"
+              >
                 <circle cx="12" cy="12" r="3" />
                 <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z" />
               </svg>
@@ -437,7 +595,16 @@ export default function SettingsModal({ isOpen, onClose, isWindow = false }: Set
               onClick={handleClose}
               className="w-7 h-7 flex items-center justify-center rounded-lg text-stone hover:text-ink hover:bg-line/50 transition-colors"
             >
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <svg
+                width="14"
+                height="14"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
                 <path d="M18 6 6 18" />
                 <path d="m6 6 12 12" />
               </svg>

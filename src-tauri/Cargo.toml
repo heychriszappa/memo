@@ -1,6 +1,6 @@
 [package]
 name = "stik"
-version = "0.7.9"
+version = "0.8.0"
 description = "Instant thought capture"
 authors = ["Massi"]
 edition = "2021"
@@ -14,7 +14,7 @@ tauri-build = { version = "2", features = [] }
 prost-build = "0.13"
 
 [dependencies]
-tauri = { version = "2", features = ["macos-private-api", "tray-icon", "image-png", "protocol-asset"] }
+tauri = { version = "2", features = ["macos-private-api", "tray-icon", "image-png", "protocol-asset", "devtools"] }
 tauri-plugin-global-shortcut = "2"
 tauri-plugin-fs = "2"
 tauri-plugin-shell = "2"
@@ -43,10 +43,20 @@ notify-debouncer-mini = "0.5"
 security-framework = "3"
 objc2 = { version = "0.6.3", default-features = false, features = ["std"] }
 objc2-app-kit = { version = "0.3.2", default-features = false, features = ["NSView", "NSBitmapImageRep", "NSImageRep", "NSApplication", "NSRunningApplication"] }
+core-graphics = "0.24"
+core-foundation = "0.10"
 objc2-foundation = { version = "0.3.2", default-features = false, features = ["NSData", "NSDictionary", "NSGeometry"] }
 
 [dev-dependencies]
 glib = ">=0.20"
+
+[features]
+# The custom-protocol feature tells tauri-codegen to embed the frontend
+# from `frontendDist` instead of connecting to `devUrl`. `cargo tauri
+# build` enables it implicitly; `cargo tauri dev` leaves it off so the
+# vite dev server is used. Our dev-rebuild.sh passes it explicitly via
+# `cargo build --features custom-protocol` because it bypasses tauri-cli.
+custom-protocol = ["tauri/custom-protocol"]
 
 [profile.release]
 panic = "abort"

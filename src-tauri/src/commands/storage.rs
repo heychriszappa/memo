@@ -42,11 +42,20 @@ pub fn current_mode() -> StorageMode {
 }
 
 /// Get the root Stik directory for the current storage mode.
+/// When `use_directory_as_root` is enabled and a custom directory is set,
+/// the custom path is used directly without appending a `Stik/` subfolder.
 pub fn stik_root() -> Result<PathBuf, String> {
     match current_mode() {
         StorageMode::ICloud => icloud_stik_root(),
         StorageMode::Custom(dir) => {
-            let path = PathBuf::from(&dir).join("Stik");
+            let use_as_root = settings::load_settings_from_file()
+                .map(|s| s.use_directory_as_root)
+                .unwrap_or(false);
+            let path = if use_as_root {
+                PathBuf::from(&dir)
+            } else {
+                PathBuf::from(&dir).join("Stik")
+            };
             fs::create_dir_all(&path).map_err(|e| e.to_string())?;
             Ok(path)
         }
@@ -59,42 +68,44 @@ pub fn stik_root() -> Result<PathBuf, String> {
     }
 }
 
-/// Well-known macOS iCloud container path for Stik.
-/// On macOS, iCloud Drive containers are stored at a deterministic path
-/// under ~/Library/Mobile Documents/. We resolve this from Rust directly
-/// instead of going through the DarwinKit sidecar, because the sidecar's
-/// FileManager.url(forUbiquityContainerIdentifier:) requires proper code
-/// signing with iCloud entitlements (not ad-hoc signing).
-const ICLOUD_CONTAINER_FOLDER: &str = "iCloud~com~0xmassi~stik";
+/// Stik uses the generic iCloud Drive folder (`com~apple~CloudDocs`) rather
+/// than a dedicated ubiquity container. A dedicated container would require
+/// the `com.apple.developer.icloud-container-identifiers` entitlement and a
+/// provisioning profile from Apple Developer — which blocks ad-hoc signed
+/// builds from launching (see v0.7.7). The generic folder requires no
+/// entitlements, is visible in Finder's iCloud Drive sidebar, and is
+/// available to any app whenever the user has iCloud Drive enabled.
+const ICLOUD_DRIVE_FOLDER: &str = "com~apple~CloudDocs";
 
-/// Get the iCloud container base path (parent of Documents/Stik).
+/// Get the root of the user's iCloud Drive. This is the folder that shows
+/// up under "iCloud Drive" in Finder — not a Stik-specific container.
 pub fn icloud_container_path() -> Result<PathBuf, String> {
     let home = dirs::home_dir().ok_or("Cannot determine home directory")?;
-    let mobile_docs = home.join("Library").join("Mobile Documents");
-    let container = mobile_docs.join(ICLOUD_CONTAINER_FOLDER);
-    Ok(container)
+    let drive = home
+        .join("Library")
+        .join("Mobile Documents")
+        .join(ICLOUD_DRIVE_FOLDER);
+    Ok(drive)
 }
 
-/// Check whether the iCloud container exists on disk, meaning iCloud Drive
-/// is enabled and the container has been provisioned.
+/// Check whether iCloud Drive is available on this machine.
 pub fn icloud_available() -> bool {
-    icloud_container_path()
-        .map(|p| p.exists())
-        .unwrap_or(false)
+    icloud_container_path().map(|p| p.exists()).unwrap_or(false)
 }
 
-/// Resolve the iCloud container's Stik root using the well-known macOS path.
+/// Resolve the iCloud Drive Stik folder, creating it if needed.
 fn icloud_stik_root() -> Result<PathBuf, String> {
-    let container = icloud_container_path()?;
+    let drive = icloud_container_path()?;
 
-    if !container.exists() {
+    if !drive.exists() {
         return Err(
-            "iCloud container not available. Please enable iCloud Drive in System Settings.".to_string()
+            "iCloud Drive is not available. Enable iCloud Drive in System Settings → Apple ID → iCloud."
+                .to_string(),
         );
     }
 
-    let path = container.join("Documents").join("Stik");
-    fs::create_dir_all(&path).map_err(|e| format!("Failed to create iCloud Stik directory: {}", e))?;
+    let path = drive.join("Stik");
+    fs::create_dir_all(&path).map_err(|e| format!("Failed to create iCloud Stik folder: {}", e))?;
     Ok(path)
 }
 
@@ -250,7 +261,10 @@ pub fn list_dir(path: &str) -> Result<Vec<DirEntry>, String> {
                         name: e.get("name")?.as_str()?.to_string(),
                         is_directory: e.get("is_directory")?.as_bool()?,
                         size: e.get("size")?.as_u64().unwrap_or(0),
-                        modified: e.get("modified").and_then(|v| v.as_str()).map(|s| s.to_string()),
+                        modified: e
+                            .get("modified")
+                            .and_then(|v| v.as_str())
+                            .map(|s| s.to_string()),
                     })
                 })
                 .collect())
@@ -261,13 +275,10 @@ pub fn list_dir(path: &str) -> Result<Vec<DirEntry>, String> {
                 .filter_map(|entry| {
                     let entry = entry.ok()?;
                     let metadata = entry.metadata().ok()?;
-                    let modified = metadata
-                        .modified()
-                        .ok()
-                        .map(|t| {
-                            let dt: chrono::DateTime<chrono::Local> = t.into();
-                            dt.to_rfc3339()
-                        });
+                    let modified = metadata.modified().ok().map(|t| {
+                        let dt: chrono::DateTime<chrono::Local> = t.into();
+                        dt.to_rfc3339()
+                    });
                     Some(DirEntry {
                         name: entry.file_name().to_string_lossy().to_string(),
                         is_directory: metadata.is_dir(),

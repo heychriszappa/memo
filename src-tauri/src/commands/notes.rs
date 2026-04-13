@@ -124,46 +124,55 @@ pub fn save_note_inner(folder: String, content: String) -> Result<NoteSaved, Str
     })
 }
 
+/// Post-save side effects: analytics, indexing, embeddings, last_saved_note tracking.
+/// Callable from both the Tauri command and the clipboard capture shortcut handler.
+pub fn post_save_processing(app: &AppHandle, result: &NoteSaved, content: &str) {
+    if result.path.is_empty() {
+        return;
+    }
+
+    let word_count = content.split_whitespace().count();
+    analytics::track(
+        "note_created",
+        serde_json::json!({ "word_count": word_count }),
+    );
+
+    let index = app.state::<NoteIndex>();
+    index.add(&result.path, &result.folder);
+    git_share::notify_note_changed(&result.folder);
+
+    if super::settings::load_settings_from_file()
+        .map(|s| s.ai_features_enabled)
+        .unwrap_or(false)
+    {
+        let emb_index = app.state::<EmbeddingIndex>();
+        if let Some(emb) = embeddings::embed_content(content) {
+            emb_index.add_entry(&result.path, emb);
+            let _ = emb_index.save();
+        }
+    }
+
+    let state = app.state::<AppState>();
+    let mut last = state
+        .last_saved_note
+        .lock()
+        .unwrap_or_else(|e: std::sync::PoisonError<_>| e.into_inner());
+    *last = Some(LastSavedNote {
+        path: result.path.clone(),
+        folder: result.folder.clone(),
+    });
+}
+
 #[tauri::command]
 pub fn save_note(
     app: AppHandle,
     folder: String,
     content: String,
-    index: State<'_, NoteIndex>,
-    emb_index: State<'_, EmbeddingIndex>,
+    _index: State<'_, NoteIndex>,
+    _emb_index: State<'_, EmbeddingIndex>,
 ) -> Result<NoteSaved, String> {
     let result = save_note_inner(folder, content.clone())?;
-
-    if !result.path.is_empty() {
-        let word_count = content.split_whitespace().count();
-        analytics::track(
-            "note_created",
-            serde_json::json!({ "word_count": word_count }),
-        );
-
-        index.add(&result.path, &result.folder);
-        git_share::notify_note_changed(&result.folder);
-        if super::settings::load_settings_from_file()
-            .map(|s| s.ai_features_enabled)
-            .unwrap_or(false)
-        {
-            if let Some(emb) = embeddings::embed_content(&content) {
-                emb_index.add_entry(&result.path, emb);
-                let _ = emb_index.save();
-            }
-        }
-
-        let state = app.state::<AppState>();
-        let mut last = state
-            .last_saved_note
-            .lock()
-            .unwrap_or_else(|e: std::sync::PoisonError<_>| e.into_inner());
-        *last = Some(LastSavedNote {
-            path: result.path.clone(),
-            folder: result.folder.clone(),
-        });
-    }
-
+    post_save_processing(&app, &result, &content);
     Ok(result)
 }
 
@@ -217,11 +226,28 @@ pub fn get_note_content_inner(path: &str) -> Result<String, String> {
     let stik_folder = get_stik_folder()?;
     let note_path = PathBuf::from(path);
 
-    if !note_path.starts_with(&stik_folder) {
-        return Err("Invalid path: note must be within Stik folder".to_string());
+    // Canonicalize both sides to handle symlinks (/tmp → /private/tmp),
+    // trailing slashes, and relative-component differences that would
+    // otherwise break PathBuf::starts_with's component-wise compare.
+    // Falls back to the raw path when canonicalize fails (e.g. the file
+    // hasn't been downloaded yet in iCloud), so the existence check below
+    // still reports a useful error.
+    let canonical_stik = stik_folder
+        .canonicalize()
+        .unwrap_or_else(|_| stik_folder.clone());
+    let canonical_note = note_path
+        .canonicalize()
+        .unwrap_or_else(|_| note_path.clone());
+
+    if !canonical_note.starts_with(&canonical_stik) {
+        return Err(format!(
+            "Note is outside the Stik folder.\n  note: {}\n  root: {}",
+            note_path.display(),
+            stik_folder.display()
+        ));
     }
     if !super::storage::path_exists(path) {
-        return Err("Note file does not exist".to_string());
+        return Err(format!("Note file not found: {}", note_path.display()));
     }
 
     super::storage::read_file(path)

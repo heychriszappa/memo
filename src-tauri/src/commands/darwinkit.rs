@@ -212,13 +212,51 @@ fn bridge_loop(sidecar_path: String, rx: Receiver<BridgeMessage>) {
 }
 
 fn spawn_sidecar(path: &str) -> Result<(Child, ChildStdin, ChildStdout), String> {
+    // Pipe stderr through a reader thread in debug builds so sidecar logs
+    // ([speech], [darwinkit]) land in /tmp/stik-darwinkit.log where we can
+    // tail them while debugging. In release, discard.
+    let stderr_cfg = if cfg!(debug_assertions) {
+        Stdio::piped()
+    } else {
+        Stdio::null()
+    };
+
     let mut child = Command::new(path)
         .arg("serve")
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
-        .stderr(if cfg!(debug_assertions) { Stdio::inherit() } else { Stdio::null() })
+        .stderr(stderr_cfg)
         .spawn()
         .map_err(|e| format!("spawn failed: {}", e))?;
+
+    #[cfg(debug_assertions)]
+    if let Some(stderr) = child.stderr.take() {
+        thread::Builder::new()
+            .name("stik-darwinkit-stderr".to_string())
+            .spawn(move || {
+                use std::io::Write as _;
+                let reader = BufReader::new(stderr);
+                let path = "/tmp/stik-darwinkit.log";
+                let mut file = match std::fs::OpenOptions::new()
+                    .create(true)
+                    .append(true)
+                    .open(path)
+                {
+                    Ok(f) => f,
+                    Err(e) => {
+                        eprintln!("Failed to open {}: {}", path, e);
+                        return;
+                    }
+                };
+                let _ = writeln!(file, "\n━━━━━ sidecar stderr stream opened ━━━━━");
+                for line in reader.lines().map_while(Result::ok) {
+                    let _ = writeln!(file, "{}", line);
+                    let _ = file.flush();
+                    eprintln!("[sidecar-err] {}", line);
+                }
+            })
+            .ok();
+    }
 
     let stdin = child
         .stdin

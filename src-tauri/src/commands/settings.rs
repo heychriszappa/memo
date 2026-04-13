@@ -87,6 +87,27 @@ impl Default for ICloudSettings {
 
 pub use super::note_lock::NoteLockSettings;
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
+pub struct DictationSettings {
+    /// WhisperKit model variant id. None = not yet configured.
+    pub active_model: Option<String>,
+    /// ISO language code ("en", "it", …) or None for auto-detect.
+    pub active_language: Option<String>,
+    /// Master toggle for the dictation feature.
+    pub enabled: bool,
+}
+
+impl Default for DictationSettings {
+    fn default() -> Self {
+        Self {
+            active_model: None,
+            active_language: None,
+            enabled: true,
+        }
+    }
+}
+
 fn default_true() -> bool {
     true
 }
@@ -159,6 +180,10 @@ pub struct StikSettings {
     pub icloud: ICloudSettings,
     #[serde(default)]
     pub note_lock: NoteLockSettings,
+    #[serde(default)]
+    pub use_directory_as_root: bool,
+    #[serde(default)]
+    pub dictation: DictationSettings,
 }
 
 impl Default for StikSettings {
@@ -213,6 +238,8 @@ impl Default for StikSettings {
             custom_fonts: vec![],
             icloud: ICloudSettings::default(),
             note_lock: NoteLockSettings::default(),
+            use_directory_as_root: false,
+            dictation: DictationSettings::default(),
         }
     }
 }
@@ -224,12 +251,15 @@ pub fn default_system_shortcuts() -> HashMap<String, String> {
         ("settings".to_string(), "Cmd+Shift+Comma".to_string()),
         ("last_note".to_string(), "Cmd+Shift+L".to_string()),
         ("zen_mode".to_string(), "Cmd+Period".to_string()),
+        ("dictation".to_string(), "Cmd+Shift+D".to_string()),
+        ("voice_note".to_string(), "Cmd+Shift+V".to_string()),
+        ("clip_capture".to_string(), "Cmd+Shift+C".to_string()),
     ])
 }
 
 /// Actions that are in-app only (not registered as OS-level global shortcuts).
 pub fn local_only_actions() -> &'static [&'static str] {
-    &["zen_mode"]
+    &["zen_mode", "dictation"]
 }
 
 fn normalize_system_shortcuts(shortcuts: &mut HashMap<String, String>) {

@@ -25,6 +25,11 @@ npm-debug.log*
 # Internal strategy docs (not public)
 .internal/
 
+# Local dev-only scripts (not shipped to users)
+scripts/dev-rebuild.sh
+scripts/setup-local-cert.sh
+scripts/test-speech.sh
+
 # Agent skills (installed via npx skills add)
 .agent/
 .agents/
@@ -33,6 +38,7 @@ npm-debug.log*
 .codebuddy/
 .commandcode/
 .continue/
+.cortex/
 .crush/
 .cursor/
 .factory/

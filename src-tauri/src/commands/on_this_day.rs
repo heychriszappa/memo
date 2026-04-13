@@ -2,9 +2,9 @@ use chrono::{Datelike, Local, NaiveDate};
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::PathBuf;
-use std::process::Command;
 
 use super::folders::get_stik_folder;
+use super::macos_notify;
 use super::versioning;
 
 const PREVIEW_MAX_LEN: usize = 120;
@@ -67,8 +67,12 @@ fn check_on_this_day(force: bool, show_notification: bool) -> Result<OnThisDaySt
 
     if show_notification {
         let title = "On This Day";
-        let subtitle = &format!("{} ({})", candidate.folder, candidate.date.format("%b %d, %Y"));
-        show_macos_notification(title, subtitle, &candidate.preview)?;
+        let subtitle = &format!(
+            "{} ({})",
+            candidate.folder,
+            candidate.date.format("%b %d, %Y")
+        );
+        macos_notify::show(title, subtitle, &candidate.preview)?;
 
         let new_state = OnThisDayState {
             last_notified_date: Some(today.format("%Y-%m-%d").to_string()),
@@ -119,7 +123,10 @@ fn collect_candidates(today: NaiveDate) -> Result<Vec<OnThisDayCandidate>, Strin
                     continue;
                 };
 
-                if date.month() == today.month() && date.day() == today.day() && date.year() < today.year() {
+                if date.month() == today.month()
+                    && date.day() == today.day()
+                    && date.year() < today.year()
+                {
                     let content = fs::read_to_string(&path).unwrap_or_default();
                     candidates.push(OnThisDayCandidate {
                         date,
@@ -135,7 +142,10 @@ fn collect_candidates(today: NaiveDate) -> Result<Vec<OnThisDayCandidate>, Strin
 }
 
 fn select_best_candidate(candidates: &[OnThisDayCandidate]) -> Option<OnThisDayCandidate> {
-    candidates.iter().cloned().max_by_key(|candidate| candidate.date)
+    candidates
+        .iter()
+        .cloned()
+        .max_by_key(|candidate| candidate.date)
 }
 
 fn parse_date_from_filename(filename: &str) -> Option<NaiveDate> {
@@ -197,41 +207,6 @@ fn save_state(state: &OnThisDayState) -> Result<(), String> {
     versioning::save_versioned(&path, state)
 }
 
-#[cfg(target_os = "macos")]
-fn show_macos_notification(title: &str, subtitle: &str, body: &str) -> Result<(), String> {
-    let escaped_title = escape_applescript(title);
-    let escaped_subtitle = escape_applescript(subtitle);
-    let escaped_body = escape_applescript(body);
-    let script = format!(
-        "display notification \"{}\" with title \"{}\" subtitle \"{}\"",
-        escaped_body, escaped_title, escaped_subtitle
-    );
-
-    let status = Command::new("osascript")
-        .arg("-e")
-        .arg(script)
-        .status()
-        .map_err(|e| e.to_string())?;
-
-    if status.success() {
-        Ok(())
-    } else {
-        Err("Failed to show macOS notification".to_string())
-    }
-}
-
-#[cfg(not(target_os = "macos"))]
-fn show_macos_notification(_title: &str, _subtitle: &str, _body: &str) -> Result<(), String> {
-    Ok(())
-}
-
-fn escape_applescript(value: &str) -> String {
-    value
-        .replace('\\', "\\\\")
-        .replace('"', "\\\"")
-        .replace('\n', " ")
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -259,7 +234,10 @@ mod tests {
         ];
 
         let selected = select_best_candidate(&candidates).expect("candidate exists");
-        assert_eq!(selected.date, NaiveDate::from_ymd_opt(2025, 2, 6).expect("valid"));
+        assert_eq!(
+            selected.date,
+            NaiveDate::from_ymd_opt(2025, 2, 6).expect("valid")
+        );
         assert_eq!(selected.folder, "Work");
     }
 

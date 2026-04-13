@@ -14,7 +14,12 @@ import { isMarkdownEffectivelyEmpty } from "@/utils/normalizeMarkdownForCopy";
 import { shouldHideCaptureOnBlur } from "@/utils/blurAutoHide";
 import { resolveCaptureFolder } from "@/utils/folderSelection";
 
-type WindowType = "postit" | "sticked" | "settings" | "command-palette" | "apple-notes-picker";
+type WindowType =
+  | "postit"
+  | "sticked"
+  | "settings"
+  | "command-palette"
+  | "apple-notes-picker";
 const PENDING_UPDATE_KEY = "stik_pending_update_version";
 
 function getWindowInfo(): { type: WindowType; id?: string; viewing?: boolean } {
@@ -25,7 +30,7 @@ function getWindowInfo(): { type: WindowType; id?: string; viewing?: boolean } {
     return {
       type: "sticked",
       id: params.get("id") || undefined,
-      viewing: params.get("viewing") === "true"
+      viewing: params.get("viewing") === "true",
     };
   }
 
@@ -33,7 +38,11 @@ function getWindowInfo(): { type: WindowType; id?: string; viewing?: boolean } {
     return { type: "settings" };
   }
 
-  if (windowType === "search" || windowType === "manager" || windowType === "command-palette") {
+  if (
+    windowType === "search" ||
+    windowType === "manager" ||
+    windowType === "command-palette"
+  ) {
     return { type: "command-palette" };
   }
 
@@ -59,14 +68,15 @@ export default function App() {
   const resolveFolder = useCallback(
     async (requestedFolder?: string, settingsFromEvent?: StikSettings) => {
       const folders = await invoke<string[]>("list_folders");
-      const settings = settingsFromEvent ?? (await invoke<StikSettings>("get_settings"));
+      const settings =
+        settingsFromEvent ?? (await invoke<StikSettings>("get_settings"));
       return resolveCaptureFolder({
         requestedFolder: requestedFolder?.trim(),
         defaultFolder: settings.default_folder?.trim(),
         availableFolders: folders,
       });
     },
-    []
+    [],
   );
 
   // Initialize capture window with a valid folder (requested/default/fallback).
@@ -103,10 +113,12 @@ export default function App() {
     if (windowInfo.viewing) {
       const fetchViewingContent = async () => {
         try {
-          const data = await invoke<{ id: string; content: string; folder: string; path: string }>(
-            "get_viewing_note_content",
-            { id: windowInfo.id }
-          );
+          const data = await invoke<{
+            id: string;
+            content: string;
+            folder: string;
+            path: string;
+          }>("get_viewing_note_content", { id: windowInfo.id });
           setStickedNote({
             id: data.id,
             content: data.content,
@@ -163,6 +175,15 @@ export default function App() {
         skipNextBlurHideRef.current = false;
         return;
       }
+      // Dictation holds the window open: when the mic is active or
+      // the setup modal is mounted, a blur is expected (TCC prompt,
+      // download dialog, etc.) and must never hide the postit.
+      if (
+        (window as unknown as { __stikDictationHoldOpen?: boolean })
+          .__stikDictationHoldOpen
+      ) {
+        return;
+      }
       if (pendingBlurHideRef.current !== null) {
         window.clearTimeout(pendingBlurHideRef.current);
       }
@@ -171,8 +192,16 @@ export default function App() {
 
         const nowMs = Date.now();
         if (nowMs < blurIgnoreUntilRef.current) return;
+        if (
+          (window as unknown as { __stikDictationHoldOpen?: boolean })
+            .__stikDictationHoldOpen
+        ) {
+          return;
+        }
 
-        const isFocused = await getCurrentWindow().isFocused().catch(() => false);
+        const isFocused = await getCurrentWindow()
+          .isFocused()
+          .catch(() => false);
         if (isFocused) return;
 
         const shouldHide = shouldHideCaptureOnBlur({
@@ -270,14 +299,20 @@ export default function App() {
 
         const pendingVersion = localStorage.getItem(PENDING_UPDATE_KEY);
         if (pendingVersion === update.version) {
-          console.log(`Update v${update.version} already installed and pending restart`);
+          console.log(
+            `Update v${update.version} already installed and pending restart`,
+          );
           return;
         }
 
-        console.log(`Stik update available: v${update.currentVersion} → v${update.version}`);
+        console.log(
+          `Stik update available: v${update.currentVersion} → v${update.version}`,
+        );
         await update.downloadAndInstall();
         localStorage.setItem(PENDING_UPDATE_KEY, update.version);
-        console.log(`Update v${update.version} installed; will apply on next restart`);
+        console.log(
+          `Update v${update.version} installed; will apply on next restart`,
+        );
       } catch (error) {
         console.error("Auto-update failed:", error);
       }
@@ -311,10 +346,15 @@ export default function App() {
   }, []);
 
   const handleSave = useCallback(
-    async (content: string, preferredFolder?: string): Promise<string | undefined> => {
+    async (
+      content: string,
+      preferredFolder?: string,
+    ): Promise<string | undefined> => {
       if (isMarkdownEffectivelyEmpty(content)) return undefined;
 
-      const resolvedFolder = await resolveFolder(preferredFolder ?? currentFolder);
+      const resolvedFolder = await resolveFolder(
+        preferredFolder ?? currentFolder,
+      );
 
       if (resolvedFolder !== currentFolder) {
         setCurrentFolder(resolvedFolder);
@@ -326,7 +366,7 @@ export default function App() {
       });
       return result.path || undefined;
     },
-    [currentFolder, resolveFolder]
+    [currentFolder, resolveFolder],
   );
 
   const handleClose = useCallback(async () => {
@@ -365,11 +405,17 @@ export default function App() {
     if (loadError) {
       return (
         <div className="w-full h-full flex flex-col items-center justify-center bg-bg rounded-[14px] gap-3 p-6">
-          <div className="text-coral text-sm font-medium">Failed to load note</div>
-          <div className="text-stone text-xs text-center max-w-[280px]">{loadError}</div>
+          <div className="text-coral text-sm font-medium">
+            Failed to load note
+          </div>
+          <div className="text-stone text-xs text-center max-w-[280px]">
+            {loadError}
+          </div>
           <button
             onClick={async () => {
-              const { getCurrentWindow } = await import("@tauri-apps/api/window");
+              const { getCurrentWindow } = await import(
+                "@tauri-apps/api/window"
+              );
               await getCurrentWindow().close();
             }}
             className="mt-2 px-4 py-2 text-xs bg-line hover:bg-line/70 text-ink rounded-lg transition-colors"
@@ -422,7 +468,9 @@ export default function App() {
         onOpenSettings={handleOpenSettings}
         onContentChange={handleContentChange}
       />
-      {showAnalyticsNotice && <AnalyticsNotice onDismiss={handleDismissAnalyticsNotice} />}
+      {showAnalyticsNotice && (
+        <AnalyticsNotice onDismiss={handleDismissAnalyticsNotice} />
+      )}
     </>
   );
 }

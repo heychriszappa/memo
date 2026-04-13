@@ -6,11 +6,15 @@ import type {
   CustomFontEntry,
   CustomTemplate,
   CustomThemeDefinition,
+  DictationDownloadProgress,
+  DictationModelInfo,
+  DictationStatus,
   GitSyncStatus,
   ShortcutMapping,
   StikSettings,
   ThemeColors,
 } from "@/types";
+import { listen } from "@tauri-apps/api/event";
 import { BUILTIN_COMMAND_NAMES } from "@/extensions/cm-slash-commands";
 import ConfirmDialog from "./ConfirmDialog";
 import {
@@ -129,6 +133,7 @@ export type SettingsTab =
   | "templates"
   | "git"
   | "ai"
+  | "dictation"
   | "insights"
   | "privacy";
 
@@ -1651,7 +1656,9 @@ export default function SettingsContent({
   const [showGitAdvanced, setShowGitAdvanced] = useState(false);
   const remoteWebUrl = remoteToWebUrl(settings.git_sharing.remote_url);
   const notesDir = settings.notes_directory
-    ? `${settings.notes_directory}/Stik`
+    ? settings.use_directory_as_root
+      ? settings.notes_directory
+      : `${settings.notes_directory}/Stik`
     : resolvedNotesDir || "~/Documents/Stik";
   const linkedRepoPath =
     settings.git_sharing.repository_layout === "stik_root"
@@ -2007,12 +2014,32 @@ export default function SettingsContent({
                   </button>
                 )}
               </div>
-              <p className="mt-1.5 text-[12px] text-stone leading-relaxed">
-                Stik creates a{" "}
-                <span className="text-ink font-medium">Stik/</span> folder
-                inside your chosen location. Existing notes are not moved
-                automatically.
-              </p>
+              {!settings.use_directory_as_root && (
+                <p className="mt-1.5 text-[12px] text-stone leading-relaxed">
+                  Stik creates a{" "}
+                  <span className="text-ink font-medium">Stik/</span> folder
+                  inside your chosen location. Existing notes are not moved
+                  automatically.
+                </p>
+              )}
+              {settings.notes_directory && (
+                <label className="flex items-center gap-2 mt-2.5 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={settings.use_directory_as_root ?? false}
+                    onChange={(e) =>
+                      onSettingsChange({
+                        ...settings,
+                        use_directory_as_root: e.target.checked,
+                      })
+                    }
+                    className="rounded border-line"
+                  />
+                  <span className="text-[12px] text-ink">
+                    Use directory as root (skip Stik subfolder)
+                  </span>
+                </label>
+              )}
             </div>
           )}
 
@@ -2603,6 +2630,13 @@ export default function SettingsContent({
         </div>
       )}
 
+      {activeTab === "dictation" && (
+        <DictationSettingsPanel
+          settings={settings}
+          onSettingsChange={onSettingsChange}
+        />
+      )}
+
       {activeTab === "insights" && (
         <div className="space-y-4">
           <div>
@@ -2675,6 +2709,360 @@ export default function SettingsContent({
           settings={settings}
           onSettingsChange={onSettingsChange}
         />
+      )}
+    </div>
+  );
+}
+
+// ── Dictation settings panel ───────────────────────────────────────
+
+const DICTATION_LANGUAGES: { code: string | null; label: string }[] = [
+  { code: null, label: "Auto-detect" },
+  { code: "en", label: "English" },
+  { code: "it", label: "Italian" },
+  { code: "es", label: "Spanish" },
+  { code: "fr", label: "French" },
+  { code: "de", label: "German" },
+  { code: "pt", label: "Portuguese" },
+  { code: "nl", label: "Dutch" },
+  { code: "ja", label: "Japanese" },
+  { code: "zh", label: "Chinese" },
+  { code: "ko", label: "Korean" },
+  { code: "ru", label: "Russian" },
+  { code: "ar", label: "Arabic" },
+  { code: "hi", label: "Hindi" },
+  { code: "tr", label: "Turkish" },
+  { code: "pl", label: "Polish" },
+  { code: "el", label: "Greek" },
+  { code: "cs", label: "Czech" },
+  { code: "sv", label: "Swedish" },
+  { code: "ro", label: "Romanian" },
+  { code: "uk", label: "Ukrainian" },
+];
+
+function DictationSettingsPanel({
+  settings,
+  onSettingsChange,
+}: {
+  settings: StikSettings;
+  onSettingsChange: (s: StikSettings) => void;
+}) {
+  const [models, setModels] = useState<DictationModelInfo[]>([]);
+  const [status, setStatus] = useState<DictationStatus | null>(null);
+  const [downloadingId, setDownloadingId] = useState<string | null>(null);
+  const [downloadProgress, setDownloadProgress] = useState(0);
+  const [downloadBytesDone, setDownloadBytesDone] = useState(0);
+  const [downloadBytesTotal, setDownloadBytesTotal] = useState(0);
+  // The model we're in the process of loading into memory. Used to show
+  // a "Loading…" state on the Use-this-model button and to block other
+  // buttons while a load is in flight.
+  const [loadingId, setLoadingId] = useState<string | null>(null);
+  // Elapsed seconds since the load started — surfaced in the UI so the
+  // user can tell it's making progress vs frozen. Turbo first-load is
+  // legitimately ~2 minutes (CoreML compilation + ANE warmup).
+  const [loadElapsed, setLoadElapsed] = useState(0);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
+  // Tick the elapsed counter while a load is in flight
+  useEffect(() => {
+    if (!loadingId) {
+      setLoadElapsed(0);
+      return;
+    }
+    const started = Date.now();
+    const interval = window.setInterval(() => {
+      setLoadElapsed(Math.floor((Date.now() - started) / 1000));
+    }, 500);
+    return () => window.clearInterval(interval);
+  }, [loadingId]);
+
+  const dictation = settings.dictation ?? {
+    active_model: null,
+    active_language: null,
+    enabled: true,
+  };
+
+  const refresh = useCallback(async () => {
+    try {
+      const [list, stat] = await Promise.all([
+        invoke<DictationModelInfo[]>("dictation_list_models"),
+        invoke<DictationStatus>("dictation_get_status"),
+      ]);
+      setModels(list);
+      setStatus(stat);
+    } catch (e) {
+      setErrorMsg(String(e));
+    }
+  }, []);
+
+  useEffect(() => {
+    refresh();
+  }, [refresh]);
+
+  // Subscribe to download lifecycle events only. Model loading is now
+  // fully synchronous from the frontend's perspective: the invoke for
+  // `dictation_set_active_model` blocks until the sidecar finishes
+  // loading (or errors), so there's no need for separate lifecycle
+  // events on that path.
+  useEffect(() => {
+    const u1 = listen<DictationDownloadProgress>(
+      "dictation:download_progress",
+      (e) => {
+        setDownloadProgress(e.payload.progress);
+        setDownloadBytesDone(e.payload.bytes_done);
+        setDownloadBytesTotal(e.payload.bytes_total);
+      },
+    );
+    const u2 = listen<{ model_id: string }>(
+      "dictation:download_complete",
+      async () => {
+        setDownloadingId(null);
+        await refresh();
+      },
+    );
+    const u3 = listen<{ model_id: string; message: string }>(
+      "dictation:download_error",
+      (e) => {
+        setDownloadingId(null);
+        setErrorMsg(e.payload.message);
+      },
+    );
+    return () => {
+      u1.then((fn) => fn());
+      u2.then((fn) => fn());
+      u3.then((fn) => fn());
+    };
+  }, [refresh]);
+
+  const startDownload = useCallback(async (modelId: string) => {
+    setErrorMsg(null);
+    setDownloadingId(modelId);
+    setDownloadProgress(0);
+    setDownloadBytesDone(0);
+    setDownloadBytesTotal(0);
+    try {
+      await invoke("dictation_download_model", { modelId });
+    } catch (e) {
+      setDownloadingId(null);
+      setErrorMsg(String(e));
+    }
+  }, []);
+
+  const cancelDownload = useCallback(async () => {
+    try {
+      await invoke("dictation_cancel_download");
+    } catch {
+      /* ignore */
+    }
+    setDownloadingId(null);
+  }, []);
+
+  const setActive = useCallback(
+    async (modelId: string) => {
+      setErrorMsg(null);
+      setLoadingId(modelId);
+      // The invoke blocks until the sidecar finishes loading the model
+      // (or times out at 180 s). On success we persist the choice and
+      // refresh the panel so the ACTIVE badge moves to the new model.
+      try {
+        await invoke("dictation_set_active_model", { modelId });
+        onSettingsChange({
+          ...settings,
+          dictation: { ...dictation, active_model: modelId },
+        });
+        await refresh();
+      } catch (e) {
+        setErrorMsg(String(e));
+      } finally {
+        setLoadingId(null);
+      }
+    },
+    [settings, dictation, onSettingsChange, refresh],
+  );
+
+  const deleteModel = useCallback(
+    async (modelId: string) => {
+      try {
+        await invoke("dictation_delete_model", { modelId });
+        if (dictation.active_model === modelId) {
+          onSettingsChange({
+            ...settings,
+            dictation: { ...dictation, active_model: null },
+          });
+        }
+        await refresh();
+      } catch (e) {
+        setErrorMsg(String(e));
+      }
+    },
+    [settings, dictation, onSettingsChange, refresh],
+  );
+
+  return (
+    <div className="space-y-4">
+      <div className="p-4 bg-line/30 rounded-xl border border-line/50">
+        <p className="text-[13px] text-ink font-medium">On-device dictation</p>
+        <p className="mt-1 text-[12px] text-stone leading-relaxed">
+          Stik uses <span className="text-ink font-medium">Whisper</span>{" "}
+          running locally on your Mac. Audio never leaves your device.
+        </p>
+      </div>
+
+      {/* Language */}
+      <div>
+        <label className="block text-[12px] text-stone mb-1.5">
+          Dictation language
+        </label>
+        <Dropdown
+          value={dictation.active_language ?? ""}
+          options={DICTATION_LANGUAGES.map((l) => ({
+            value: l.code ?? "",
+            label: l.label,
+          }))}
+          onChange={(value) =>
+            onSettingsChange({
+              ...settings,
+              dictation: {
+                ...dictation,
+                active_language: value || null,
+              },
+            })
+          }
+          placeholder="Select language"
+        />
+        <p className="mt-1.5 text-[11px] text-stone">
+          Auto-detect works for most cases. Pick a specific language for the
+          best accuracy.
+        </p>
+      </div>
+
+      {/* Model manager */}
+      <div>
+        <label className="block text-[12px] text-stone mb-1.5">Models</label>
+        <div className="space-y-2">
+          {models.map((m) => {
+            const isActive = status?.active_model === m.id;
+            const isDownloading = downloadingId === m.id;
+            return (
+              <div
+                key={m.id}
+                className={`p-3 rounded-lg border ${
+                  isActive
+                    ? "border-coral bg-coral-light/20"
+                    : "border-line bg-line/10"
+                }`}
+              >
+                <div className="flex items-baseline justify-between mb-1">
+                  <div className="flex items-baseline gap-2">
+                    <span className="text-[13px] text-ink font-medium">
+                      {m.label}
+                    </span>
+                    {isActive && (
+                      <span className="text-[10px] text-coral uppercase tracking-wide">
+                        Active
+                      </span>
+                    )}
+                  </div>
+                  <span className="text-[11px] text-stone">{m.size_mb} MB</span>
+                </div>
+                <p className="text-[11px] text-stone leading-snug mb-2">
+                  {m.description}
+                </p>
+
+                {isDownloading ? (
+                  <div>
+                    <div className="w-full h-1.5 bg-line/30 rounded-full overflow-hidden mb-1">
+                      <div
+                        className="h-full bg-coral transition-all"
+                        style={{
+                          width: `${Math.round(downloadProgress * 100)}%`,
+                        }}
+                      />
+                    </div>
+                    <div className="flex items-center justify-between text-[11px] text-stone">
+                      <span>
+                        {(() => {
+                          const pct = Math.round(downloadProgress * 100);
+                          if (downloadBytesTotal > 1_000_000) {
+                            return `${pct}% — ${(
+                              downloadBytesDone / 1_000_000
+                            ).toFixed(1)} / ${(
+                              downloadBytesTotal / 1_000_000
+                            ).toFixed(1)} MB`;
+                          }
+                          return downloadProgress > 0
+                            ? `${pct}%`
+                            : "Connecting…";
+                        })()}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={cancelDownload}
+                        className="text-coral hover:underline"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                ) : m.downloaded ? (
+                  <div>
+                    <div className="flex gap-2">
+                      {!isActive &&
+                        (loadingId === m.id ? (
+                          <button
+                            type="button"
+                            disabled
+                            className="px-3 py-1 text-[11px] bg-coral/60 text-white rounded-md cursor-wait"
+                          >
+                            Loading… {loadElapsed}s
+                          </button>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => setActive(m.id)}
+                            disabled={loadingId !== null}
+                            className="px-3 py-1 text-[11px] bg-coral text-white rounded-md hover:bg-coral/90 disabled:opacity-50"
+                          >
+                            Use this model
+                          </button>
+                        ))}
+                      <button
+                        type="button"
+                        onClick={() => deleteModel(m.id)}
+                        disabled={loadingId !== null}
+                        className="px-3 py-1 text-[11px] text-stone border border-line rounded-md hover:text-coral hover:border-coral/30 disabled:opacity-50"
+                      >
+                        Delete
+                      </button>
+                    </div>
+                    {loadingId === m.id && (
+                      <p className="mt-1.5 text-[10px] text-stone leading-snug">
+                        {m.size_mb >= 500
+                          ? "First load compiles the model for the Neural Engine — this can take up to 2 minutes. It's instant after that."
+                          : "First load compiles the model for the Neural Engine — this can take 20–30 seconds. It's instant after that."}
+                      </p>
+                    )}
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => startDownload(m.id)}
+                    disabled={downloadingId !== null}
+                    className="px-3 py-1 text-[11px] bg-coral text-white rounded-md hover:bg-coral/90 disabled:opacity-50"
+                  >
+                    Download
+                  </button>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {errorMsg && (
+        <div className="p-3 bg-coral-light/30 border border-coral/30 rounded-lg">
+          <p className="text-[11px] text-coral break-words">{errorMsg}</p>
+        </div>
       )}
     </div>
   );

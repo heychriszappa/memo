@@ -11,6 +11,7 @@ import { invoke, convertFileSrc } from "@tauri-apps/api/core";
 import Editor, { type EditorRef } from "./Editor";
 import FolderPicker from "./FolderPicker";
 import AiMenu from "./AiMenu";
+import SpeechButton from "./SpeechButton";
 import type { StickedNote, StikSettings } from "@/types";
 import type { VimMode } from "@/extensions/cm-vim";
 import {
@@ -136,6 +137,12 @@ export default function PostIt({
   );
   const [icloudEnabled, setIcloudEnabled] = useState(false);
   const [zenMode, setZenMode] = useState(false);
+  const [dictationActiveModel, setDictationActiveModel] = useState<
+    string | null
+  >(null);
+  const [dictationLanguage, setDictationLanguage] = useState<string | null>(
+    null,
+  );
   const [formatToolbar, setFormatToolbar] = useState(() => {
     try {
       return localStorage.getItem("stik:format-toolbar") !== "0";
@@ -145,6 +152,10 @@ export default function PostIt({
   });
   const commandInputRef = useRef<HTMLInputElement | null>(null);
   const editorRef = useRef<EditorRef | null>(null);
+  const speechRef = useRef<{ toggle: () => void } | null>(null);
+  // Tracks how many chars the last dictation partial inserted, so the next
+  // partial replaces only its own previous text (not everything after cursor).
+  const speechPartialLenRef = useRef(0);
   const copyMenuRef = useRef<HTMLDivElement | null>(null);
   const foldersRef = useRef<string[]>([]);
   const contentRef = useRef(content);
@@ -275,6 +286,8 @@ export default function PostIt({
           (s.text_direction as "auto" | "ltr" | "rtl") || "auto",
         );
         setIcloudEnabled(s.icloud?.enabled ?? false);
+        setDictationActiveModel(s.dictation?.active_model ?? null);
+        setDictationLanguage(s.dictation?.active_language ?? null);
       })
       .catch(() => {});
     invoke<string[]>("list_folders")
@@ -296,6 +309,8 @@ export default function PostIt({
         (event.payload.text_direction as "auto" | "ltr" | "rtl") || "auto",
       );
       setIcloudEnabled(event.payload.icloud?.enabled ?? false);
+      setDictationActiveModel(event.payload.dictation?.active_model ?? null);
+      setDictationLanguage(event.payload.dictation?.active_language ?? null);
     });
     return () => {
       unlisten.then((fn) => fn());
@@ -668,6 +683,53 @@ export default function PostIt({
     window.addEventListener("keydown", handleZenToggle);
     return () => window.removeEventListener("keydown", handleZenToggle);
   }, [systemShortcuts.zen_mode]);
+
+  // Dictation shortcut (reads from settings, defaults to Cmd+Shift+D)
+  useEffect(() => {
+    const shortcutStr = systemShortcuts.dictation || "Cmd+Shift+D";
+    const handleDictation = (e: KeyboardEvent) => {
+      const parts = shortcutStr.split("+");
+      const key = parts[parts.length - 1];
+      const needsMeta = parts.some(
+        (p) => p === "Cmd" || p === "Command" || p === "Meta",
+      );
+      const needsShift = parts.some((p) => p === "Shift");
+      const needsAlt = parts.some((p) => p === "Alt" || p === "Option");
+      const needsCtrl = parts.some((p) => p === "Ctrl" || p === "Control");
+
+      if (needsMeta !== e.metaKey) return;
+      if (needsShift !== e.shiftKey) return;
+      if (needsAlt !== e.altKey) return;
+      if (needsCtrl !== e.ctrlKey) return;
+
+      const eventKey =
+        e.key === "." ? "Period" : e.key === "," ? "Comma" : e.key;
+      if (eventKey.toLowerCase() !== key.toLowerCase()) return;
+
+      e.preventDefault();
+      speechRef.current?.toggle();
+    };
+    window.addEventListener("keydown", handleDictation);
+    return () => window.removeEventListener("keydown", handleDictation);
+  }, [systemShortcuts.dictation]);
+
+  // Voice-note global shortcut — Rust fires `start-dictation` after
+  // showing the postit window. The listener is mounted once for the
+  // lifetime of the postit webview, so late-firing events (e.g. fired
+  // before focus transition completes) still land correctly.
+  useEffect(() => {
+    const unlisten = listen("start-dictation", () => {
+      // Small delay to make sure the window is focused and the editor
+      // has committed its mount before we toggle the mic — without it,
+      // the cursor position captured by getInsertOrigin can be stale.
+      window.setTimeout(() => {
+        speechRef.current?.toggle();
+      }, 80);
+    });
+    return () => {
+      unlisten.then((fn) => fn());
+    };
+  }, []);
 
   // CMD+/CMD-/CMD+0 to adjust editor font size
   useEffect(() => {
@@ -1654,6 +1716,74 @@ export default function PostIt({
                     </div>
                   )}
                 </div>
+
+                <SpeechButton
+                  ref={speechRef}
+                  activeModel={dictationActiveModel}
+                  language={dictationLanguage}
+                  onActiveModelSelected={async (modelId, lang) => {
+                    // Persist the modal choice into settings.json so
+                    // next launch / ⌘⇧V use the same model without
+                    // reprompting. Also update local state so the
+                    // current session reflects the choice immediately.
+                    try {
+                      const current =
+                        await invoke<StikSettings>("get_settings");
+                      const next: StikSettings = {
+                        ...current,
+                        dictation: {
+                          active_model: modelId,
+                          active_language: lang,
+                          enabled: current.dictation?.enabled ?? true,
+                        },
+                      };
+                      await invoke("save_settings", { settings: next });
+                      setDictationActiveModel(modelId);
+                      setDictationLanguage(lang);
+                      await getCurrentWindow().emit("settings-changed", next);
+                    } catch (e) {
+                      console.error("Failed to persist dictation choice:", e);
+                    }
+                  }}
+                  getInsertOrigin={() => {
+                    const view = editorRef.current?.getView();
+                    speechPartialLenRef.current = 0;
+                    return view ? view.state.selection.main.head : 0;
+                  }}
+                  onPartialText={(text, from) => {
+                    const view = editorRef.current?.getView();
+                    if (!view) return;
+                    // Replace only the previous partial insertion — not
+                    // everything to end-of-doc — so text after the cursor
+                    // is preserved when dictating mid-document.
+                    const to = Math.min(
+                      from + speechPartialLenRef.current,
+                      view.state.doc.length,
+                    );
+                    view.dispatch({
+                      changes: { from, to, insert: text },
+                      selection: { anchor: from + text.length },
+                    });
+                    speechPartialLenRef.current = text.length;
+                  }}
+                  onTranscription={(text, from) => {
+                    const view = editorRef.current?.getView();
+                    if (view) {
+                      const to = Math.min(
+                        from + speechPartialLenRef.current,
+                        view.state.doc.length,
+                      );
+                      view.dispatch({
+                        changes: { from, to, insert: text },
+                        selection: { anchor: from + text.length },
+                      });
+                      setContent(view.state.doc.toString());
+                    } else {
+                      setContent((prev) => prev + (prev ? " " : "") + text);
+                    }
+                    speechPartialLenRef.current = 0;
+                  }}
+                />
 
                 <AiMenu
                   content={content}

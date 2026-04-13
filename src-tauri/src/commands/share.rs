@@ -95,6 +95,19 @@ fn copy_png_bytes_to_clipboard(png_bytes: &[u8]) -> Result<(), String> {
         .map_err(|e| format!("Failed to write image to clipboard: {e}"))
 }
 
+/// Read text from the system clipboard. Kept around for future use;
+/// the clip_capture shortcut no longer needs it because we read the
+/// selected text directly from the focused UI element via the
+/// Accessibility API instead of the pasteboard.
+#[allow(dead_code)]
+pub fn read_clipboard_text() -> Result<String, String> {
+    let mut clipboard =
+        arboard::Clipboard::new().map_err(|e| format!("Clipboard unavailable: {e}"))?;
+    clipboard
+        .get_text()
+        .map_err(|e| format!("No text on clipboard: {e}"))
+}
+
 fn markdown_to_html(markdown: &str) -> String {
     let mut options = Options::empty();
     options.insert(Options::ENABLE_TABLES);
@@ -189,9 +202,10 @@ mod tests {
         let decoded_bytes = base64::engine::general_purpose::STANDARD
             .decode(&png_base64)
             .unwrap();
-        let decoded_image = image::load_from_memory_with_format(&decoded_bytes, image::ImageFormat::Png)
-            .unwrap()
-            .to_rgba8();
+        let decoded_image =
+            image::load_from_memory_with_format(&decoded_bytes, image::ImageFormat::Png)
+                .unwrap()
+                .to_rgba8();
         let (width, height) = decoded_image.dimensions();
         let pixels = decoded_image.into_raw();
 

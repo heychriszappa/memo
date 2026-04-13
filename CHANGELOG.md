@@ -5,6 +5,30 @@ All notable changes to Stik will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.0] - 2026-04-13
+Voice dictation, clipboard capture, and dev tooling
+
+### Added
+- **On-device voice dictation** — new `⌘⇧D` shortcut toggles live Whisper-backed dictation inside the note editor. All transcription runs locally via [WhisperKit](https://github.com/argmaxinc/WhisperKit) on the Neural Engine; audio never leaves your Mac. Models are downloaded on demand and persist across launches
+- **Voice note shortcut** — `⌘⇧V` opens a fresh post-it and starts dictating immediately, for frictionless capture-by-voice
+- **Dictation setup modal** — first-run picker for language (auto-detect + 20 common languages) and Whisper model tier (`small` ~250 MB for speed, `large-v3 turbo` ~632 MB for accuracy). Choice is persisted, reopens on demand from Settings
+- **Dictation settings panel** — new "Dictation" tab under Settings lets you change active model, switch languages, delete downloaded models, and see disk usage
+- **Clip capture** — new `⌘⇧C` shortcut grabs the currently-selected text from any app (Safari, Terminal, VS Code, anywhere with a standard text field) via the Accessibility API and appends it to a dedicated "Clips" note. No clipboard round-trip, no flaky keystroke simulation
+- **Accessibility permission prompts** — when clip capture is used without Accessibility granted, Stik now opens System Settings → Privacy & Security → Accessibility directly, with session-level dedup so it doesn't re-open on every failed capture
+
+### Fixed
+- **iCloud container path broken after macOS iCloud migration** (#60) — Stik now syncs into `~/Library/Mobile Documents/com~apple~CloudDocs/Stik/` (standard iCloud Drive) instead of the legacy `iCloud~com~0xmassi~stik` container path, which had stopped working for new installs
+- **Search results couldn't open notes** (#61) — `get_note_content` was rejecting valid paths because it compared raw input against a canonicalized notes root. Both sides now canonicalize before the `starts_with` check, so notes opened from semantic search results load correctly
+
+### Changed
+- **DarwinKit sidecar updated to v0.3.0** — adds `dictation.*` method surface and concurrent JSON-RPC request dispatch so slow handlers (e.g. a 30–60 s WhisperKit CoreML compilation) no longer block fast NLP calls
+- **Hardened runtime gains `com.apple.security.device.audio-input`** — required for mic access under signed + notarized builds
+- **App moved devtools console behind an explicit opt-in** — no longer auto-opens in debug builds, which was noisy while iterating on features that steal focus
+
+### Developer experience
+- Local dev now uses a stable code-signing identity (auto-detects `Developer ID Application` in login keychain, or falls back to a self-signed `Stik Local Dev` cert), so TCC grants (Mic, Accessibility) persist across rebuilds instead of needing to be re-granted on every `cargo build`
+- Fast incremental rebuild loop (`~20–40 s` vs. `2–3 min` for full bundle) for iterating on TCC/entitlements/signing-dependent features that `tauri dev` can't cover
+
 ## [0.7.9] - 2026-03-17
 Local file watching and external change detection
 

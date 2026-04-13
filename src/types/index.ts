@@ -104,6 +104,35 @@ export interface StikSettings {
   custom_fonts?: CustomFontEntry[];
   icloud: ICloudSettings;
   note_lock: NoteLockSettings;
+  use_directory_as_root?: boolean;
+  dictation?: DictationSettings;
+}
+
+export interface DictationSettings {
+  active_model: string | null;
+  active_language: string | null;
+  enabled: boolean;
+}
+
+export interface DictationModelInfo {
+  id: string;
+  label: string;
+  size_mb: number;
+  description: string;
+  downloaded: boolean;
+}
+
+export interface DictationStatus {
+  installed_models: string[];
+  active_model: string | null;
+  downloading: string | null;
+}
+
+export interface DictationDownloadProgress {
+  model_id: string;
+  progress: number; // 0..1
+  bytes_done: number;
+  bytes_total: number;
 }
 
 export interface NoteInfo {
