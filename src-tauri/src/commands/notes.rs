@@ -1,5 +1,4 @@
 use base64::Engine;
-use chrono::Local;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use tauri::{AppHandle, Emitter, Manager, State};
@@ -41,11 +40,12 @@ pub struct SearchResult {
     pub locked: bool,
 }
 
-/// Build a filesystem-safe slug from the first line of content, capped at 33 chars.
-/// Strips leading markdown heading markers (#), trims whitespace, replaces
-/// non-alphanumeric characters with hyphens, collapses runs of hyphens, and
-/// removes leading/trailing hyphens.
-fn generate_slug(content: &str) -> String {
+/// Derive a filename stem from the first line of content (up to 33 chars).
+/// Strips leading markdown heading markers (#) and trims whitespace.
+/// Replaces characters that are illegal on macOS filesystems ( / : ) with a
+/// space, collapses runs of whitespace, and trims the result.
+/// Preserves original casing and word spacing — no slugification.
+fn generate_stem(content: &str) -> String {
     // Take the first non-empty line
     let first_line = content
         .lines()
@@ -53,44 +53,43 @@ fn generate_slug(content: &str) -> String {
         .find(|l| !l.is_empty())
         .unwrap_or("");
 
-    // Strip leading markdown heading markers
+    // Strip leading markdown heading markers and surrounding whitespace
     let stripped = first_line.trim_start_matches('#').trim();
 
-    // Keep only alphanumeric and whitespace, replace the rest with '-'
-    let slug: String = stripped
+    // Replace filesystem-unsafe characters with a space, then collapse whitespace
+    let cleaned: String = stripped
         .chars()
-        .map(|c| if c.is_alphanumeric() || c == ' ' { c } else { '-' })
+        .map(|c| match c {
+            '/' | ':' | '\0' => ' ',
+            _ => c,
+        })
         .collect::<String>()
         .split_whitespace()
         .collect::<Vec<_>>()
-        .join("-")
-        .to_lowercase();
+        .join(" ");
 
-    // Truncate at 33 chars on a char boundary
-    let slug = if slug.len() > 33 {
+    // Truncate at 33 chars on a char boundary, trimming any trailing space
+    let stem = if cleaned.len() > 33 {
         let mut end = 33;
-        while end > 0 && !slug.is_char_boundary(end) {
+        while end > 0 && !cleaned.is_char_boundary(end) {
             end -= 1;
         }
-        // Trim any trailing hyphen left by truncation
-        slug[..end].trim_end_matches('-').to_string()
+        cleaned[..end].trim_end().to_string()
     } else {
-        slug
+        cleaned
     };
 
-    if slug.is_empty() {
+    if stem.is_empty() {
         "note".to_string()
     } else {
-        slug
+        stem
     }
 }
 
-/// Generate filename from the first 33 chars of the first line (as a slug).
-/// A short UUID suffix prevents collisions when notes share the same opening line.
+/// Generate filename directly from the first line of content (up to 33 chars).
+/// No timestamp, no slug, no suffix — the name IS the content.
 fn generate_filename(content: &str) -> String {
-    let slug = generate_slug(content);
-    let suffix = &uuid::Uuid::new_v4().to_string()[..4];
-    format!("{}-{}.md", slug, suffix)
+    format!("{}.md", generate_stem(content))
 }
 
 fn is_break_placeholder_line(line: &str) -> bool {
@@ -127,9 +126,27 @@ pub fn save_note_inner(folder: String, content: String) -> Result<NoteSaved, Str
     // Ensure folder exists
     super::storage::ensure_dir(&folder_path.to_string_lossy())?;
 
-    // Generate filename and write
-    let filename = generate_filename(&content);
-    let file_path = folder_path.join(&filename);
+    // Generate filename and write.
+    // If a file with this name already exists, append a counter suffix to avoid
+    // overwriting a previous note that started with the same line.
+    let base_filename = generate_filename(&content);
+    let stem = base_filename.trim_end_matches(".md");
+    let (filename, file_path) = {
+        let candidate = folder_path.join(&base_filename);
+        if !super::storage::path_exists(&candidate.to_string_lossy()) {
+            (base_filename, candidate)
+        } else {
+            let mut n = 2u32;
+            loop {
+                let name = format!("{} {}.md", stem, n);
+                let path = folder_path.join(&name);
+                if !super::storage::path_exists(&path.to_string_lossy()) {
+                    break (name, path);
+                }
+                n += 1;
+            }
+        }
+    };
 
     super::storage::write_file(&file_path.to_string_lossy(), &content)?;
 

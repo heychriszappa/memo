@@ -243,14 +243,9 @@ fn read_note_entry(path: &PathBuf, folder: &str) -> Option<NoteEntry> {
     let locked = super::note_lock::is_locked_content(&content);
 
     let (title, preview, content_len) = if locked {
-        // Derive title from filename: slug-uuid.md → slug (drop the 4-char UUID suffix)
+        // Derive title from filename: the stem IS the first line of the note (up to 33 chars)
         let fname = path.file_stem().unwrap_or_default().to_string_lossy();
-        let title = fname
-            .rfind('-')
-            .map(|i| &fname[..i]) // everything before the last '-' (the UUID suffix)
-            .filter(|s| !s.is_empty())
-            .map(|s| s.replace('-', " "))
-            .unwrap_or_else(|| fname.to_string());
+        let title = fname.to_string();
         (title, String::new(), 0)
     } else {
         let content_len = content.len();
