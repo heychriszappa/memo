@@ -17,7 +17,7 @@ use commands::{
 use shortcuts::shortcut_to_string;
 use state::AppState;
 use tauri::{AppHandle, Emitter, Manager, RunEvent};
-use tauri_plugin_global_shortcut::{Code, Modifiers, ShortcutState};
+use tauri_plugin_global_shortcut::ShortcutState;
 use windows::{show_command_palette, show_postit_with_folder, show_settings};
 
 fn folder_for_opened_note(path: &std::path::Path, stik_root: &std::path::Path) -> String {

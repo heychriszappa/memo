@@ -58,7 +58,7 @@
         "role": "Editor"
       }
     ],
-    "createUpdaterArtifacts": "v1Compatible",
+    "createUpdaterArtifacts": false,
     "externalBin": [
       "binaries/darwinkit"
     ],
