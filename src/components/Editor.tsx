@@ -187,6 +187,12 @@ const Editor = forwardRef<EditorRef, EditorProps>(
             return false;
           },
         },
+        // Cmd+Enter: consumed here so CodeMirror doesn't insert a newline
+        // before the window-level handler fires to save and close.
+        {
+          key: "Mod-Enter",
+          run: (_view) => true,
+        },
         // Enter: insert a newline (standard behaviour).
         // Smart behaviour: if cursor is right before closing markers (** ~~ ==),
         // close the formatting first, then insert the newline.
